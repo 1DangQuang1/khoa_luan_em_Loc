@@ -1,13 +1,13 @@
 package com.example.stock;
 
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.beans.factory.annotation.Value;
-
-import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.example.stock.dtos.VietcapResponseData;
 
@@ -20,7 +20,7 @@ public class StockApplication implements CommandLineRunner {
     private final VietcapRequestClient client;
     private final VietcapKafkaProducer producer;
 
-    @Value("${application.stock.kafka-topic}")
+    @Value("${application.stock.kafka_topic}")
     private String kafkaTopic;
 
     public StockApplication(
@@ -35,11 +35,36 @@ public class StockApplication implements CommandLineRunner {
     }
 
     @Override
-    public void run(String... args) throws Exception {
-        List<VietcapResponseData> response = client.getStockData("HOSE");
+    public void run(String... args) {
+        logger.info("Stock polling started...");
 
-        logger.info("Received {} stock items", response.size());
+        while (true) {
+            try {
+                List<VietcapResponseData> response =
+                        client.getStockData("HOSE");
 
-        producer.send(kafkaTopic, response);
+                logger.info("Received {} stock items", response.size());
+
+                producer.send(kafkaTopic, response);
+
+                // sleep 2 seconds
+                Thread.sleep(2000);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.warn("Polling interrupted, shutting down...");
+                break;
+
+            } catch (Exception e) {
+                logger.error("Error while fetching or pushing stock data", e);
+
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
     }
 }
